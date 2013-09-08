@@ -9,8 +9,10 @@
 
     <style>
       .fast-transition {
-        transition-duration: 200ms !important;
-        animation-duration 200ms !important;
+        -webkit-transition: width 180ms ease-out !important;
+        -moz-transition: width 180ms ease-out !important;
+        -o-transition: width 180ms ease-out !important;
+        transition: width 180ms ease-out !important;
       }
     </style>
 
@@ -46,7 +48,7 @@
         };
       }
 
-      var data = makeRows(300, 10),
+      var data = makeRows(500, 10),
           model = {
             message: ko.observable("stopped"),
             data: ko.observable(),
@@ -177,7 +179,7 @@
                   return;
                 }
 
-                for(i=0; i < 50; i++) {
+                for(i=0; i < 15; i++) {
                   if(!operation()) {
                     break;
                   }
@@ -248,10 +250,10 @@
     <div data-bind="context-progress: 'table'">
       <button data-bind="click: reload">Reload</button>
       <div data-bind="if: data">
-        <div data-bind="visible: !$progress['table'].hasCompleted()">
+        <div>
           <div data-bind="text: $progress['table'].hasCompleted () ? 'stopped' : 'running'"></div>
           <div data-bind="text: $progress['table'].percentageText"></div>
-          <div class="progress progress-striped active">
+          <div class="progress progress-striped" data-bind="css: { 'active': !$progress['table'].hasCompleted() }">
             <div class="bar fast-transition" data-bind="style: {'width': $progress['table'].percentageText }"></div>
           </div>
         </div>
