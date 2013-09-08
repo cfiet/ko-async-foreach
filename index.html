@@ -7,6 +7,13 @@
     <script src="knockout-2.3.0.js"></script>
     <script src="bootstrap/js/bootstrap.js"></script>
 
+    <style>
+      .fast-transition {
+        transition-duration: 200ms !important;
+        animation-duration 200ms !important;
+      }
+    </style>
+
     <script>
     (function () {
       "use strict";
@@ -39,7 +46,7 @@
         };
       }
 
-      var data = makeRows(100, 10),
+      var data = makeRows(300, 10),
           model = {
             message: ko.observable("stopped"),
             data: ko.observable(),
@@ -69,19 +76,55 @@
         return v;
       }
 
-      ko.bindingHandlers["async-foreach"] = {
+      ko.bindingHandlers["context-progress"] = {
         init: function (element, binding, allBindings, viewModel, context) {
-          var boundArray = ko.observableArray([]);
+          var name = binding(),
+            percentage = ko.observable(100),
+            hasCompleted = ko.computed(function () {
+              return percentage() >= 100;
+            }),
+            percentageText = ko.computed(function () {
+              return Math.round(percentage()) + "%"
+            }),
+            newContext = context.$progess ?
+              context.extend({}) :
+              context.extend({
+                $progress: {}
+              });
 
-          context.$asyncForeach = {
-              progress: ko.observable(1),
-              working: ko.observable(false)
+          if(newContext.$progress[name]) {
+            console.warn("Progress " + name + " already defined in newContext");
+            return;
+          }
+
+          newContext.$progress[name] = {
+            percentage: percentage,
+            percentageText: percentageText,
+            hasCompleted: hasCompleted
           };
 
+          ko.utils.domNodeDisposal.addDisposeCallback(element, function () {
+            hasCompleted.dispose();
+          });
 
-          ko.utils.domData.set(element, "async-foreach-bound-array", boundArray);
+          ko.applyBindingsToDescendants(newContext, element);
+
+          return { controlsDescendantBindings: true };
+        }
+      }
+
+      ko.bindingHandlers["async-foreach"] = {
+        init: function (element, binding, allBindings, viewModel, context) {
+          var boundArray = ko.observableArray([]),
+            domData = {
+              output: boundArray,
+              token: {},
+              inStep: false
+            };
+
+          ko.utils.domData.set(element, "async-foreach-data", domData);
           ko.utils.domNodeDisposal.addDisposeCallback( element, function () {
-            ko.utils.domData.set(element, "async-foreach-update-token", {});
+            domData.token = {};
           });
 
           $(element).children().each(function () {
@@ -92,55 +135,84 @@
         },
 
         update: function (element, binding, allBindings, viewModel, context) {
-          var data = binding(),
-              boundArray = ko.utils.domData.get(element, "async-foreach-bound-array"),
-              updateData = {
-                toRemove: [],
-                toAdd: [],
-                updateToken: {}
-              },
-              operation = function () {
-                var toRemove = updateData.toRemove,
-                  toAdd = updateData.toAdd,
-                  o;
+          var bindingValue = binding(),
+            data = bindingValue.data,
+            progress = context.$progress && context.$progress[bindingValue.progress],
+            domData = ko.utils.domData.get(element, "async-foreach-data"),
+            boundArray = domData.output,
+            updateData = {
+              toRemove: [],
+              toAdd: [],
+              updateToken: {},
+              startDate: new Date()
+            },
+            operation = function () {
+              var toRemove = updateData.toRemove,
+                toAdd = updateData.toAdd,
+                o;
 
-                if (toRemove.length > 0) {
-                  o = toRemove.shift();
-                  boundArray.remove(boundArray.indexOf(o));
-                } else if(toAdd.length > 0) {
-                  o = toAdd.shift();
-                  boundArray.push(o);
-                } else {
-                  return false;
-                }
-                return true;
-              },
-              step = function () {
-                var token = ko.utils.domData.get(element, "async-foreach-update-token"),
-                  toAdd = updateData.toAdd,
-                  toRemove = updateData.toRemove,
-                  i;
+              if (toRemove.length > 0) {
+                o = toRemove.shift();
+                boundArray.remove(boundArray.indexOf(o));
+              } else if(toAdd.length > 0) {
+                o = toAdd.shift();
+                boundArray.push(o);
+              } else {
+                return false;
+              }
+              return true;
+            },
+            step = function () {
+              var stepDomData = ko.utils.domData.get(element, "async-foreach-data"),
+                token = stepDomData.token,
+                toAdd = updateData.toAdd,
+                toRemove = updateData.toRemove,
+                i;
 
-                if(token !== updateData.updateToken || (toRemove.length === 0 && toAdd.length === 0)) {
-                  context.$asyncForeach.progress(1.0);
-                  context.$asyncForeach.working(false);
+              stepDomData.inStep = true;
+
+              try {
+                if(token !== updateData.updateToken || (toRemove.length === 0 && toAdd.length === 0) || updateData.total === 0) {
+                  console.log("Finished after " + (new Date() - updateData.startDate) + "ms");
                   return;
                 }
 
-                for(i=0; i < 10; i++) {
-                  if(! operation()) {
+                for(i=0; i < 50; i++) {
+                  if(!operation()) {
                     break;
                   }
                 }
 
-                context.$asyncForeach.progress((toAdd.length + toRemove.length) / updateData.total);
-
                 $(element).children().each(function () {
                     ko.bindingHandlers.foreach.update(this, boundArray, allBindings, viewModel, context);
                 });
-                setTimeout(step, 0);
-              },
-              diffs, k, v;
+                setTimeout(step, 200);
+              }
+              catch(e) {
+                console.error(e);
+                throw e;
+              }
+              finally {
+                stepDomData.inStep = false;
+                if(progress) {
+                  if(!updateData.total) {
+                    progress.percentage(100);
+                  }
+                  else {
+                    var total = updateData.total,
+                      a = toAdd.length,
+                      r = toRemove.length,
+                      progressValue =  100 * (1.0 - (a+r) / total);
+                    progress.percentage(progressValue);
+                  }
+                }
+              }
+            },
+            diffs, k, v;
+
+          if(domData.inStep) {
+            return;
+          }
 
           diffs = ko.utils.compareArrays(boundArray(), data);
           for (k in diffs) {
@@ -157,9 +229,12 @@
             }
           }
           updateData.total = updateData.toAdd.length + updateData.toRemove.length;
+          domData.token = updateData.updateToken;
 
-          ko.utils.domData.set(element, "async-foreach-update-token", updateData.updateToken);
-          step();
+          if(progress) {
+            progress.percentage(0);
+          }
+          setTimeout(step, 0);
         }
       };
 
@@ -170,23 +245,34 @@
     </script>
   </head>
   <body>
-    <button data-bind="click: reload">Reload</button>
-    <div data-bind="text: message"></div>
-    <div data-bind="if: data">
-      Data:
-      <div data-bind="with: data">
-        <table class="table table-hover table-bordered table-condensed" data-bind="async-foreach: rows">
-          <tr>
-            <td data-bind="text: $index">
-            </td>
-            <!-- ko foreach: cols -->
-            <td>
-              <input style="width: 50px" type="text" data-bind="value: value"></input>
-            </td>
-            <!-- /ko -->
-          </tr>
-        </table>
-        <div data-bind="text: $asyncForeach.progress"></div>
+    <div data-bind="context-progress: 'table'">
+      <button data-bind="click: reload">Reload</button>
+      <div data-bind="if: data">
+        <div data-bind="visible: !$progress['table'].hasCompleted()">
+          <div data-bind="text: $progress['table'].hasCompleted () ? 'stopped' : 'running'"></div>
+          <div data-bind="text: $progress['table'].percentageText"></div>
+          <div class="progress progress-striped active">
+            <div class="bar fast-transition" data-bind="style: {'width': $progress['table'].percentageText }"></div>
+          </div>
+        </div>
+        Data:
+        <div data-bind="with: data">
+          <div data-bind="style: {
+                            'opacity': $progress['table'].hasCompleted() ? '1.0' : '0.3' }">
+            <table class="table table-hover table-bordered table-condensed"
+              data-bind="async-foreach: { data: rows, progress: 'table' }">
+              <tr>
+                <td data-bind="text: $index">
+                </td>
+                <!-- ko foreach: cols -->
+                <td>
+                  <input style="width: 50px" type="text" data-bind="value: value"></input>
+                </td>
+                <!-- /ko -->
+              </tr>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </body>
