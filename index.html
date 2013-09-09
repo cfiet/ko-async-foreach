@@ -9,10 +9,17 @@
 
     <style>
       .fast-transition {
-        -webkit-transition: width 180ms ease-out !important;
-        -moz-transition: width 180ms ease-out !important;
-        -o-transition: width 180ms ease-out !important;
-        transition: width 180ms ease-out !important;
+        -webkit-transition: width 210ms ease-out !important;
+        -moz-transition: width 210ms ease-out !important;
+        -o-transition: width 210ms ease-out !important;
+        -ms-transition: width 210ms ease-out !important;
+        transition: width 210ms ease-out !important;
+
+        -webkit-animation: none !important;
+        -moz-animation: none !important;
+        -o-animation: none !important;
+        -ms-animation: none !important;
+        animation: none !important;
       }
     </style>
 
@@ -188,7 +195,7 @@
                 $(element).children().each(function () {
                     ko.bindingHandlers.foreach.update(this, boundArray, allBindings, viewModel, context);
                 });
-                setTimeout(step, 200);
+                setTimeout(step, 260);
               }
               catch(e) {
                 console.error(e);
